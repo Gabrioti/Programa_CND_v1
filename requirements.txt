@@ -1,3 +1,4 @@
 pdfplumber
 pytesseract
 pdf2image
+uv run pyinstaller --noconsole --onefile Códigos/main.py
