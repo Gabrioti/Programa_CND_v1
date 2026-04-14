@@ -14,7 +14,7 @@ def identificar_cnd(texto):
         return "Trabalhista", "4"
     elif "MUNICIPAL" in texto or "PREFEITURA" in texto or "MUNICÍPIO" in texto:
         return "Municipal", "3"
-    elif "ESTADO DE GOIAS" in texto or "RECEITA ESTADUAL" in texto or "FAZENDA PUBLICA ESTADUAL" in texto:
+    elif "ESTADO DE GOIAS" in texto or "RECEITA ESTADUAL" in texto or "FAZENDA PUBLICA ESTADUAL" in texto or "GOVERNO DO " in texto:
         return "Estadual", "2"
     elif "RECEITA FEDERAL" in texto or "FAZENDA NACIONAL" in texto or "MINISTÉRIO DA FAZENDA" in texto:
         return "Federal", "1"
