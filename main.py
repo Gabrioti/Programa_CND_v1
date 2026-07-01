@@ -1,8 +1,24 @@
 # main.py
 
+import os
 import sys
+import subprocess
+
+if os.name == 'nt':  # Verifica se o sistema é Windows
+    CREATE_NO_WINDOW = 0x08000000
+    original_popen = subprocess.Popen
+
+    # Cria uma versão modificada que esconde a janela à força
+    def popen_sem_janela(*args, **kwargs):
+        kwargs['creationflags'] = CREATE_NO_WINDOW
+        return original_popen(*args, **kwargs)
+
+    # Substitui a função padrão do Python pela nossa versão invisível
+    subprocess.Popen = popen_sem_janela
+
+
 import tkinter as tk
-from tkinter import filedialog, messagebox, scrolledtext
+from tkinter import filedialog, scrolledtext
 
 from processador import processar_todas_cnds
 

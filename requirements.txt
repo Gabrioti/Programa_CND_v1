@@ -1,7 +1,19 @@
 pdfplumber
 pytesseract
 pdf2image
-pyinstaller
+
+para criar um executavel:
+apague as pasta "build"
+ir para "dist" e retirar a pasta Motores dela, depois pode apagar
+apagar o arquivo "main.spec" e depois use um dos comandos abaixo:
 uv run pyinstaller --noconsole --onefile Códigos/main.py
-// se não funcionar, tente usar o comando abaixo
+ se não funcionar, tente usar o comando abaixo
 python -m PyInstaller --noconsole --onefile Codigos/main.py
+se ainda assim não funcionar, tente usar o comando abaixo
+python -m PyInstaller --noconsole --onefile --add-data "Motores\poppler-25.12.0;poppler" Codigos/main.py
+(Não esqueça de deletar a pasta build, dist e o main.spec antes de rodar o comando).
+
+Se tiver problemas com o venu n estar ativado, tente usar o comando abaixo para ativar o venu:
+.\.venv\Scripts\Activate
+se tiver problemas com a execução do comando acima, tente usar o comando abaixo para ativar o venu:
+Set-ExecutionPolicy Unrestricted -Scope Process e depois .\.venv\Scripts\Activate

@@ -5,32 +5,52 @@ import os
 import pytesseract
 from pdf2image import convert_from_path
 
-def obter_pasta_base():
-    """Retorna a pasta onde este script ou o executável está salvo"""
-    if getattr(sys, 'frozen', False):
-        return os.path.dirname(sys.executable)
-    return os.path.dirname(os.path.abspath(__file__))
+
 
 def extrair_texto_com_ocr(caminho_pdf):
     print("-> Fonte corrompida! Acionando OCR...")
     texto_extraido = ""
-    
-    pasta_base = obter_pasta_base()
-    
-    # O código procura as ferramentas na pasta "Motores", junto do script ou do .exe
-    caminho_tesseract = os.path.join(pasta_base, 'Motores', 'tesseract.exe')
-    caminho_poppler = os.path.join(pasta_base, 'Motores', 'poppler-25.12.0', 'Library', 'bin')
-    pasta_tessdata = os.path.join(pasta_base, 'Motores', 'tessdata')
-    
+
+    # ==========================================
+    # LÓGICA INTELIGENTE DE CAMINHOS
+    # ==========================================
+    if getattr(sys, 'frozen', False):
+        # 1. Se estiver rodando como .EXE:
+        pasta_exe = os.path.dirname(sys.executable) # Pasta dist/ onde o main.exe está
+        pasta_temporaria = sys._MEIPASS             # Pasta secreta onde o Poppler foi embutido
+
+        # O Poppler está embutido, pegamos da pasta secreta
+        caminho_poppler = os.path.join(pasta_temporaria, 'poppler', 'Library', 'bin')
+        
+        # O Tesseract NÃO foi embutido, pegamos da pasta Motores ao lado do .exe
+        caminho_tesseract = os.path.join(pasta_exe, 'Motores', 'tesseract.exe')
+        pasta_tessdata = os.path.join(pasta_exe, 'Motores', 'tessdata')
+
+    else:
+        # 2. Se estiver rodando solto no VS Code:
+        # Volta uma pasta (de Codigos para PROG_CND) para achar a Motores
+        pasta_raiz = os.path.dirname(os.path.dirname(os.path.abspath(__file__))) 
+
+        caminho_poppler = os.path.join(pasta_raiz, 'Motores', 'poppler-25.12.0', 'Library', 'bin')
+        caminho_tesseract = os.path.join(pasta_raiz, 'Motores', 'tesseract.exe')
+        pasta_tessdata = os.path.join(pasta_raiz, 'Motores', 'tessdata')
+
+    # ==========================================
+    # CONFIGURAÇÃO E EXECUÇÃO DO OCR
+    # ==========================================
     pytesseract.pytesseract.tesseract_cmd = caminho_tesseract
     os.environ["TESSDATA_PREFIX"] = pasta_tessdata
 
     try:
-        imagens = convert_from_path(caminho_pdf, poppler_path=caminho_poppler) 
+        # Agora o robô sabe exatamente onde o Poppler está!
+        imagens = convert_from_path(caminho_pdf, poppler_path=caminho_poppler)
+        
         for imagem in imagens:
             texto = pytesseract.image_to_string(imagem, lang='por')
             texto_extraido += texto + "\n"
+            
         return texto_extraido.upper()
+        
     except Exception as e:
         print(f"Erro no OCR: {e}")
         return ""

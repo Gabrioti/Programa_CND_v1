@@ -9,6 +9,34 @@ from tkinter import simpledialog, messagebox
 from regras import identificar_cnd
 from leitor_ocr import extrair_texto_com_ocr
 
+def extrair_cnpj(texto):
+    """
+    Procura o CNPJ de forma inteligente: primeiro buscando a palavra-chave, 
+    depois apelando para o formato numérico isolado.
+    """
+    # TENTATIVA 1: O jeito mais seguro (Procura a palavra "CNPJ" antes do número)
+    # O \s* permite espaços e :? permite os dois pontos. O \b garante que não faz parte de um número maior.
+    busca = re.search(r'CNPJ\s*:?\s*(\d{2}\.?\d{3}\.?\d{3}/?\d{4}-?\d{2})\b', texto)
+    
+    # TENTATIVA 2: Fallback genérico
+    # Se a palavra CNPJ não for encontrada, procura apenas o padrão numérico exato e isolado
+    if not busca:
+        busca = re.search(r'\b(\d{2}\.?\d{3}\.?\d{3}/?\d{4}-?\d{2})\b', texto)
+        
+    if busca:
+        # Pega o resultado encontrado (que pode ter vindo com ou sem pontuação)
+        cnpj_cru = busca.group(1)
+        
+        # Faxina: Limpa tudo que NÃO for número (\D), deixando apenas os 14 dígitos puros
+        numeros = re.sub(r'\D', '', cnpj_cru)
+        
+        # Reconstrói e formata perfeitamente (usando - no lugar da / para o Windows aceitar)
+        if len(numeros) == 14:
+            cnpj_perfeito = f"{numeros[:2]}.{numeros[2:5]}.{numeros[5:8]}-{numeros[8:12]}-{numeros[12:]}"
+            return cnpj_perfeito
+            
+    return "CNPJ INDEFINIDO"
+
 def processar_todas_cnds(pasta_trabalho, modo_debug=False):
     arquivos_pdf = [arquivo for arquivo in os.listdir(pasta_trabalho) if arquivo.lower().endswith('.pdf')]
     if not arquivos_pdf:
@@ -41,7 +69,7 @@ def processar_todas_cnds(pasta_trabalho, modo_debug=False):
             # O TRUQUE DO MODO DEBUG FICA AQUI
             # ==========================================
             if modo_debug:
-                print(f"\n[🔎 MODO DEBUG ATIVADO] O que o robô leu no arquivo {nome_arquivo}:")
+                print(f"\n[ MODO DEBUG ATIVADO] O que o robô leu no arquivo {nome_arquivo}:")
                 print("========================================")
                 print(texto_do_pdf)
                 print("========================================\n")
@@ -50,6 +78,8 @@ def processar_todas_cnds(pasta_trabalho, modo_debug=False):
             if not origem:
                 print("-> AVISO: Órgão não identificado. Pulando...")
                 continue
+
+            cnpj = extrair_cnpj(texto_do_pdf)
             
             if not modo_debug:
                 print(f"-> Identificado: CND {origem}")
@@ -110,33 +140,36 @@ def processar_todas_cnds(pasta_trabalho, modo_debug=False):
                                 pass
 
             elif origem == "Municipal":
-                # 1. Tenta pegar a cidade direto do campo "CIDADE:" (Cobre Terezópolis)
-                busca_cidade_direta = re.search(r'CIDADE:\s*(.*?)(?=\n|$)', texto_do_pdf)
-                
-                # 2. Tentativas antigas caso a de cima falhe
+                # As três formas de buscar (Apenas procurando, ainda não decidindo)
                 busca_nome_cidade = re.search(r'(?:PREFEITURA MUNICIPAL DE|MUNIC[ÍI]PIO DE)\s+([A-ZÁÀÂÃÉÈÊÍÏÓÒÔÕÚÙÛÇ ]+)', texto_do_pdf)
-                
-                # CORRIGIDO: Adicionado \s na lista de caracteres para aceitar a quebra de linha no meio do nome
                 busca_alt = re.search(r'ADMINISTRADOS PELA\s+([A-ZÁÀÂÃÉÈÊÍÏÓÒÔÕÚÙÛÇ\s]+?)(?:\s+-|\s*,)', texto_do_pdf)
+                busca_cidade_direta = re.search(r'(?:CIDADE|MUNIC[ÍI]PIO):[\s:]*(.*?)(?=\n|$)', texto_do_pdf)
                 
-                # Lógica de definição da cidade
-                if busca_cidade_direta:
+                # Lógica de definição da cidade (NOVA ORDEM DE PRIORIDADE)
+                # 1º - Tenta achar no cabeçalho (Cobre: Formosa)
+                if busca_nome_cidade:
+                    cidade = re.sub(r'(?i)\s+DE\s+GOI[ÁA]S$', '', busca_nome_cidade.group(1).split('\n')[0].strip()).title()
+
+                # 2º - Tenta achar o campo CIDADE explícito (Cobre: Terezópolis)
+                elif busca_cidade_direta:
                     cidade_crua = busca_cidade_direta.group(1).replace("-GO", "").replace("- GO", "").strip()
                     cidade = re.sub(r'(?i)\s+DE\s+GOI[ÁA]S$', '', cidade_crua).title()
-                    
-                elif busca_nome_cidade:
-                    cidade = re.sub(r'(?i)\s+DE\s+GOI[ÁA]S$', '', busca_nome_cidade.group(1).split('\n')[0].strip()).title()
-                    
+
+                # 3º - Tenta achar no texto como último recurso (Cobre: Águas Lindas)
                 elif busca_alt:
-                    # CORRIGIDO: Troca a quebra de linha por espaço e remove espaços duplos
                     cidade_limpa = busca_alt.group(1).replace('\n', ' ').strip()
-                    cidade_limpa = re.sub(r'\s+', ' ', cidade_limpa) # Garante que não fiquem dois espaços juntos
+                    cidade_limpa = re.sub(r'\s+', ' ', cidade_limpa)
                     cidade = re.sub(r'(?i)\s+DE\s+GOI[ÁA]S$', '', cidade_limpa).title()
-            
+                    if len(cidade) > 30:  
+                        cidade = "Águas Lindas"
+                    
+                # Se nada funcionar, pede ajuda ao usuário
                 else:
                     resposta = simpledialog.askstring("Cidade não identificada", f"Arquivo: {nome_arquivo}\nPor favor, digite o nome da cidade:")
                     cidade = resposta.strip().title() if resposta else "Desconhecida"
 
+                # Faxina anti-erro do Windows (Garante que nenhum símbolo proibido passe)
+                cidade = re.sub(r'[<>:"/\\|?*]', '', cidade).strip()
                 # CONSERTADO: Removido o bug que forçava tudo a ser "Positiva com Efeito Negativo"
                 if "EFEITO DE NEGATIVA" in texto_do_pdf or "EFEITOS DE NEGATIVA" in texto_do_pdf or "EFEITO NEGATIVO" in texto_do_pdf or "EFEITO NEGATIVA" in texto_do_pdf: 
                     status = "Positiva com Efeito Negativo"
@@ -216,7 +249,7 @@ def processar_todas_cnds(pasta_trabalho, modo_debug=False):
             continue
 
         nome_origem = cidade if origem == "Municipal" and cidade else origem
-        nome_base = f"{numero_categoria} - CND {nome_origem} - {status} - {data_atualizacao}"
+        nome_base = f"{numero_categoria} - CND {nome_origem} - {status} - {data_atualizacao} - {cnpj}"
         nome_final = f"{nome_base}.pdf"
         caminho_final = os.path.join(pasta_trabalho, nome_final)
         
